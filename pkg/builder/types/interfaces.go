@@ -24,8 +24,8 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
-	generator "k8s.io/kube-state-metrics/pkg/metric_generator"
-	"k8s.io/kube-state-metrics/pkg/options"
+	generator "k8s.io/kube-event-exporter/pkg/metric_generator"
+	"k8s.io/kube-event-exporter/pkg/options"
 )
 
 // BuilderInterface represent all methods that a Builder should implements

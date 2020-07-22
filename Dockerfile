@@ -1,9 +1,9 @@
 FROM gcr.io/distroless/static
 
-COPY kube-state-metrics /
+COPY kube-event-exporter /
 
 USER nobody
 
-ENTRYPOINT ["/kube-state-metrics", "--port=8080", "--telemetry-port=8081"]
+ENTRYPOINT ["/kube-event-exporter", "--port=8080", "--telemetry-port=8081"]
 
 EXPOSE 8080 8081

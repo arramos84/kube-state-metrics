@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,158 +17,67 @@ limitations under the License.
 package store
 
 import (
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/kube-event-exporter/pkg/metric"
+	generator "k8s.io/kube-event-exporter/pkg/metric_generator"
 
-	"k8s.io/kube-state-metrics/pkg/metric"
-	generator "k8s.io/kube-state-metrics/pkg/metric_generator"
+	v1 "k8s.io/api/core/v1"
 )
 
 var (
-	descServiceLabelsName          = "kube_service_labels"
-	descServiceLabelsHelp          = "Kubernetes labels converted to Prometheus labels."
-	descServiceLabelsDefaultLabels = []string{"namespace", "service"}
-
 	serviceMetricFamilies = []generator.FamilyGenerator{
 		{
-			Name: "kube_service_info",
+			Name: "kube_service_events",
 			Type: metric.Gauge,
-			Help: "Information about service.",
-			GenerateFunc: wrapSvcFunc(func(s *v1.Service) *metric.Family {
+			Help: "Service events.",
+			GenerateFunc: wrapServiceEventFunc(func(e *v1.Event) *metric.Family {
+				alertCategory := "amend"
+				if e.Type != "Normal" {
+					alertCategory = "failure"
+				}
+
 				m := metric.Metric{
-					LabelKeys:   []string{"cluster_ip", "external_name", "load_balancer_ip"},
-					LabelValues: []string{s.Spec.ClusterIP, s.Spec.ExternalName, s.Spec.LoadBalancerIP},
+					LabelKeys:   []string{"namespace", "service", "reason", "type", "message", "asserts_entity_type", "asserts_alert_type", "asserts_alert_category"},
+					LabelValues: []string{e.InvolvedObject.Namespace, e.InvolvedObject.Name, e.Reason, e.Type, e.Message, "Service", "cause", alertCategory},
 					Value:       1,
-				}
-				return &metric.Family{Metrics: []*metric.Metric{&m}}
-			}),
-		},
-		{
-			Name: "kube_service_created",
-			Type: metric.Gauge,
-			Help: "Unix creation timestamp",
-			GenerateFunc: wrapSvcFunc(func(s *v1.Service) *metric.Family {
-				if !s.CreationTimestamp.IsZero() {
-					m := metric.Metric{
-						LabelKeys:   nil,
-						LabelValues: nil,
-						Value:       float64(s.CreationTimestamp.Unix()),
-					}
-					return &metric.Family{Metrics: []*metric.Metric{&m}}
-				}
-				return &metric.Family{Metrics: []*metric.Metric{}}
-			}),
-		},
-		{
-			Name: "kube_service_spec_type",
-			Type: metric.Gauge,
-			Help: "Type about service.",
-			GenerateFunc: wrapSvcFunc(func(s *v1.Service) *metric.Family {
-				m := metric.Metric{
-
-					LabelKeys:   []string{"type"},
-					LabelValues: []string{string(s.Spec.Type)},
-					Value:       1,
-				}
-				return &metric.Family{Metrics: []*metric.Metric{&m}}
-			}),
-		},
-		{
-			Name: descServiceLabelsName,
-			Type: metric.Gauge,
-			Help: descServiceLabelsHelp,
-			GenerateFunc: wrapSvcFunc(func(s *v1.Service) *metric.Family {
-				labelKeys, labelValues := kubeLabelsToPrometheusLabels(s.Labels)
-				m := metric.Metric{
-
-					LabelKeys:   labelKeys,
-					LabelValues: labelValues,
-					Value:       1,
-				}
-				return &metric.Family{Metrics: []*metric.Metric{&m}}
-			}),
-		},
-		{
-			Name: "kube_service_spec_external_ip",
-			Type: metric.Gauge,
-			Help: "Service external ips. One series for each ip",
-			GenerateFunc: wrapSvcFunc(func(s *v1.Service) *metric.Family {
-				if len(s.Spec.ExternalIPs) == 0 {
-					return &metric.Family{
-						Metrics: []*metric.Metric{},
-					}
-				}
-
-				ms := make([]*metric.Metric, len(s.Spec.ExternalIPs))
-
-				for i, externalIP := range s.Spec.ExternalIPs {
-					ms[i] = &metric.Metric{
-						LabelKeys:   []string{"external_ip"},
-						LabelValues: []string{externalIP},
-						Value:       1,
-					}
 				}
 
 				return &metric.Family{
-					Metrics: ms,
-				}
-			}),
-		},
-		{
-			Name: "kube_service_status_load_balancer_ingress",
-			Type: metric.Gauge,
-			Help: "Service load balancer ingress status",
-			GenerateFunc: wrapSvcFunc(func(s *v1.Service) *metric.Family {
-				if len(s.Status.LoadBalancer.Ingress) == 0 {
-					return &metric.Family{
-						Metrics: []*metric.Metric{},
-					}
-				}
-
-				ms := make([]*metric.Metric, len(s.Status.LoadBalancer.Ingress))
-
-				for i, ingress := range s.Status.LoadBalancer.Ingress {
-					ms[i] = &metric.Metric{
-						LabelKeys:   []string{"ip", "hostname"},
-						LabelValues: []string{ingress.IP, ingress.Hostname},
-						Value:       1,
-					}
-				}
-
-				return &metric.Family{
-					Metrics: ms,
+					Metrics: []*metric.Metric{&m},
 				}
 			}),
 		},
 	}
 )
 
-func wrapSvcFunc(f func(*v1.Service) *metric.Family) func(interface{}) *metric.Family {
+func wrapServiceEventFunc(f func(e *v1.Event) *metric.Family) func(interface{}) *metric.Family {
 	return func(obj interface{}) *metric.Family {
-		svc := obj.(*v1.Service)
-
-		metricFamily := f(svc)
-
-		for _, m := range metricFamily.Metrics {
-			m.LabelKeys = append(descServiceLabelsDefaultLabels, m.LabelKeys...)
-			m.LabelValues = append([]string{svc.Namespace, svc.Name}, m.LabelValues...)
-		}
+		event := obj.(*v1.Event)
+		metricFamily := f(event)
 
 		return metricFamily
 	}
 }
 
-func createServiceListWatch(kubeClient clientset.Interface, ns string) cache.ListerWatcher {
+func createServiceEventListWatch(kubeClient clientset.Interface, ns string) cache.ListerWatcher {
 	return &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
-			return kubeClient.CoreV1().Services(ns).List(opts)
+			opts = metav1.ListOptions{
+				FieldSelector: "involvedObject.kind=Service",
+			}
+			return kubeClient.CoreV1().Events(ns).List(opts)
 		},
 		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
-			return kubeClient.CoreV1().Services(ns).Watch(opts)
+			opts = metav1.ListOptions{
+				FieldSelector: "involvedObject.kind=Service",
+			}
+			return kubeClient.CoreV1().Events(ns).Watch(opts)
 		},
 	}
 }
+
+

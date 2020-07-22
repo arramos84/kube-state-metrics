@@ -35,12 +35,12 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
-	"k8s.io/kube-state-metrics/internal/store"
-	"k8s.io/kube-state-metrics/pkg/allowdenylist"
-	"k8s.io/kube-state-metrics/pkg/metricshandler"
-	"k8s.io/kube-state-metrics/pkg/options"
-	"k8s.io/kube-state-metrics/pkg/util/proc"
-	"k8s.io/kube-state-metrics/pkg/version"
+	"k8s.io/kube-event-exporter/internal/store"
+	"k8s.io/kube-event-exporter/pkg/allowdenylist"
+	"k8s.io/kube-event-exporter/pkg/metricshandler"
+	"k8s.io/kube-event-exporter/pkg/options"
+	"k8s.io/kube-event-exporter/pkg/util/proc"
+	"k8s.io/kube-event-exporter/pkg/version"
 )
 
 const (
@@ -179,7 +179,7 @@ func telemetryServer(registry prometheus.Gatherer, host string, port int) {
 	// Address to listen on for web interface and telemetry
 	listenAddress := net.JoinHostPort(host, strconv.Itoa(port))
 
-	klog.Infof("Starting kube-state-metrics self metrics server: %s", listenAddress)
+	klog.Infof("Starting kube-event-exporter self metrics server: %s", listenAddress)
 
 	mux := http.NewServeMux()
 
@@ -188,9 +188,9 @@ func telemetryServer(registry prometheus.Gatherer, host string, port int) {
 	// Add index
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<html>
-             <head><title>Kube-State-Metrics Metrics Server</title></head>
+             <head><title>kube-event-exporter Metrics Server</title></head>
              <body>
-             <h1>Kube-State-Metrics Metrics</h1>
+             <h1>kube-event-exporter Metrics</h1>
 			 <ul>
              <li><a href='` + metricsPath + `'>metrics</a></li>
 			 </ul>
@@ -232,9 +232,9 @@ func serveMetrics(ctx context.Context, kubeClient clientset.Interface, storeBuil
 	// Add index
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<html>
-             <head><title>Kube Metrics Server</title></head>
+             <head><title>Event Exporter</title></head>
              <body>
-             <h1>Kube Metrics</h1>
+             <h1>Event Exporter</h1>
 			 <ul>
              <li><a href='` + metricsPath + `'>metrics</a></li>
              <li><a href='` + healthzPath + `'>healthz</a></li>

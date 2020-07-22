@@ -1,4 +1,4 @@
-module k8s.io/kube-state-metrics
+module k8s.io/kube-event-exporter
 
 require (
 	github.com/brancz/gojsontoyaml v0.0.0-20190425155809-e8bd32d46b3d

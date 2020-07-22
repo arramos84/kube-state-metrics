@@ -24,9 +24,9 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
-	internalstore "k8s.io/kube-state-metrics/internal/store"
-	ksmtypes "k8s.io/kube-state-metrics/pkg/builder/types"
-	"k8s.io/kube-state-metrics/pkg/options"
+	internalstore "k8s.io/kube-event-exporter/internal/store"
+	ksmtypes "k8s.io/kube-event-exporter/pkg/builder/types"
+	"k8s.io/kube-event-exporter/pkg/options"
 )
 
 // Builder helps to build store. It follows the builder pattern

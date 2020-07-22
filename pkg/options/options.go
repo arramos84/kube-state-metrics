@@ -26,7 +26,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// Options are the configurable parameters for kube-state-metrics.
+// Options are the configurable parameters for kube-event-exporter.
 type Options struct {
 	Apiserver       string
 	Kubeconfig      string
@@ -80,8 +80,8 @@ func (o *Options) AddFlags() {
 	o.flags.BoolVarP(&o.Help, "help", "h", false, "Print Help text")
 	o.flags.IntVar(&o.Port, "port", 8080, `Port to expose metrics on.`)
 	o.flags.StringVar(&o.Host, "host", "0.0.0.0", `Host to expose metrics on.`)
-	o.flags.IntVar(&o.TelemetryPort, "telemetry-port", 8081, `Port to expose kube-state-metrics self metrics on.`)
-	o.flags.StringVar(&o.TelemetryHost, "telemetry-host", "0.0.0.0", `Host to expose kube-state-metrics self metrics on.`)
+	o.flags.IntVar(&o.TelemetryPort, "telemetry-port", 8081, `Port to expose kube-event-exporter self metrics on.`)
+	o.flags.StringVar(&o.TelemetryHost, "telemetry-host", "0.0.0.0", `Host to expose kube-event-exporter self metrics on.`)
 	o.flags.Var(&o.Resources, "resources", fmt.Sprintf("Comma-separated list of Resources to be enabled. Defaults to %q", &DefaultResources))
 	o.flags.Var(&o.Namespaces, "namespaces", fmt.Sprintf("Comma-separated list of namespaces to be enabled. Defaults to %q", &DefaultNamespaces))
 	o.flags.Var(&o.MetricAllowlist, "metric-allowlist", "Comma-separated list of metrics to be exposed. This list comprises of exact metric names and/or regex patterns. The allowlist and denylist are mutually exclusive.")
@@ -91,9 +91,9 @@ func (o *Options) AddFlags() {
 
 	autoshardingNotice := "When set, it is expected that --pod and --pod-namespace are both set. Most likely this should be passed via the downward API. This is used for auto-detecting sharding. If set, this has preference over statically configured sharding. This is experimental, it may be removed without notice."
 
-	o.flags.StringVar(&o.Pod, "pod", "", "Name of the pod that contains the kube-state-metrics container. "+autoshardingNotice)
+	o.flags.StringVar(&o.Pod, "pod", "", "Name of the pod that contains the kube-event-exporter container. "+autoshardingNotice)
 	o.flags.StringVar(&o.Namespace, "pod-namespace", "", "Name of the namespace of the pod specified by --pod. "+autoshardingNotice)
-	o.flags.BoolVarP(&o.Version, "version", "", false, "kube-state-metrics build version information")
+	o.flags.BoolVarP(&o.Version, "version", "", false, "kube-event-exporter build version information")
 	o.flags.BoolVar(&o.EnableGZIPEncoding, "enable-gzip-encoding", false, "Gzip responses when requested by clients via 'Accept-Encoding: gzip' header.")
 }
 

@@ -29,7 +29,7 @@ var (
 	BuildDate = ""
 )
 
-// Version is the current version of kube-state-metrics.
+// Version is the current version of kube-event-exporter.
 // Update this whenever making a new release.
 // The version is of the format Major.Minor.Patch
 //
@@ -46,12 +46,12 @@ type Version struct {
 }
 
 func (v Version) String() string {
-	return fmt.Sprintf("%s/%s (%s/%s) kube-state-metrics/%s",
+	return fmt.Sprintf("%s/%s (%s/%s) kube-event-exporter/%s",
 		filepath.Base(os.Args[0]), v.Release,
 		runtime.GOOS, runtime.GOARCH, v.GitCommit)
 }
 
-// GetVersion returns the kube-state-metrics version.
+// GetVersion returns the kube-event-exporter version.
 func GetVersion() Version {
 	return Version{
 		GitCommit: Commit,

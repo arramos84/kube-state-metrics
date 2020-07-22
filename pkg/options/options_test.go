@@ -32,12 +32,12 @@ func TestOptionsParse(t *testing.T) {
 	}{
 		{
 			Desc:           "resources command line argument",
-			Args:           []string{"./kube-state-metrics", "--resources=configmaps,pods"},
+			Args:           []string{"./kube-event-exporter", "--resources=configmaps,pods"},
 			RecoverInvoked: false,
 		},
 		{
 			Desc:           "namespaces command line argument",
-			Args:           []string{"./kube-state-metrics", "--namespaces=default,kube-system"},
+			Args:           []string{"./kube-event-exporter", "--namespaces=default,kube-system"},
 			RecoverInvoked: false,
 		},
 	}

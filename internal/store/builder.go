@@ -24,31 +24,19 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	admissionregistration "k8s.io/api/admissionregistration/v1"
-	appsv1 "k8s.io/api/apps/v1"
-	autoscaling "k8s.io/api/autoscaling/v2beta1"
-	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta1 "k8s.io/api/batch/v1beta1"
-	certv1beta1 "k8s.io/api/certificates/v1beta1"
-	coordinationv1 "k8s.io/api/coordination/v1"
 	v1 "k8s.io/api/core/v1"
-	extensions "k8s.io/api/extensions/v1beta1"
-	networkingv1 "k8s.io/api/networking/v1"
-	policy "k8s.io/api/policy/v1beta1"
-	storagev1 "k8s.io/api/storage/v1"
-	vpaautoscaling "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1beta2"
 	vpaclientset "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/client/clientset/versioned"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
-	ksmtypes "k8s.io/kube-state-metrics/pkg/builder/types"
-	"k8s.io/kube-state-metrics/pkg/listwatch"
-	generator "k8s.io/kube-state-metrics/pkg/metric_generator"
-	metricsstore "k8s.io/kube-state-metrics/pkg/metrics_store"
-	"k8s.io/kube-state-metrics/pkg/options"
-	"k8s.io/kube-state-metrics/pkg/sharding"
-	"k8s.io/kube-state-metrics/pkg/watch"
+	ksmtypes "k8s.io/kube-event-exporter/pkg/builder/types"
+	"k8s.io/kube-event-exporter/pkg/listwatch"
+	generator "k8s.io/kube-event-exporter/pkg/metric_generator"
+	metricsstore "k8s.io/kube-event-exporter/pkg/metrics_store"
+	"k8s.io/kube-event-exporter/pkg/options"
+	"k8s.io/kube-event-exporter/pkg/sharding"
+	"k8s.io/kube-event-exporter/pkg/watch"
 )
 
 // Builder helps to build store. It follows the builder pattern
@@ -160,35 +148,16 @@ func (b *Builder) Build() []cache.Store {
 }
 
 var availableStores = map[string]func(f *Builder) cache.Store{
-	"certificatesigningrequests":      func(b *Builder) cache.Store { return b.buildCsrStore() },
 	"configmaps":                      func(b *Builder) cache.Store { return b.buildConfigMapStore() },
-	"cronjobs":                        func(b *Builder) cache.Store { return b.buildCronJobStore() },
 	"daemonsets":                      func(b *Builder) cache.Store { return b.buildDaemonSetStore() },
 	"deployments":                     func(b *Builder) cache.Store { return b.buildDeploymentStore() },
-	"endpoints":                       func(b *Builder) cache.Store { return b.buildEndpointsStore() },
-	"horizontalpodautoscalers":        func(b *Builder) cache.Store { return b.buildHPAStore() },
-	"ingresses":                       func(b *Builder) cache.Store { return b.buildIngressStore() },
-	"jobs":                            func(b *Builder) cache.Store { return b.buildJobStore() },
-	"leases":                          func(b *Builder) cache.Store { return b.buildLeases() },
-	"limitranges":                     func(b *Builder) cache.Store { return b.buildLimitRangeStore() },
-	"mutatingwebhookconfigurations":   func(b *Builder) cache.Store { return b.buildMutatingWebhookConfigurationStore() },
-	"namespaces":                      func(b *Builder) cache.Store { return b.buildNamespaceStore() },
-	"networkpolicies":                 func(b *Builder) cache.Store { return b.buildNetworkPolicyStore() },
+	"replicasets":                     func(b *Builder) cache.Store { return b.buildReplicaSetStore() },
+	//"namespaces":                      func(b *Builder) cache.Store { return b.buildNamespaceStore() },
 	"nodes":                           func(b *Builder) cache.Store { return b.buildNodeStore() },
 	"persistentvolumeclaims":          func(b *Builder) cache.Store { return b.buildPersistentVolumeClaimStore() },
-	"persistentvolumes":               func(b *Builder) cache.Store { return b.buildPersistentVolumeStore() },
-	"poddisruptionbudgets":            func(b *Builder) cache.Store { return b.buildPodDisruptionBudgetStore() },
 	"pods":                            func(b *Builder) cache.Store { return b.buildPodStore() },
-	"replicasets":                     func(b *Builder) cache.Store { return b.buildReplicaSetStore() },
-	"replicationcontrollers":          func(b *Builder) cache.Store { return b.buildReplicationControllerStore() },
-	"resourcequotas":                  func(b *Builder) cache.Store { return b.buildResourceQuotaStore() },
-	"secrets":                         func(b *Builder) cache.Store { return b.buildSecretStore() },
-	"services":                        func(b *Builder) cache.Store { return b.buildServiceStore() },
 	"statefulsets":                    func(b *Builder) cache.Store { return b.buildStatefulSetStore() },
-	"storageclasses":                  func(b *Builder) cache.Store { return b.buildStorageClassStore() },
-	"validatingwebhookconfigurations": func(b *Builder) cache.Store { return b.buildValidatingWebhookConfigurationStore() },
-	"volumeattachments":               func(b *Builder) cache.Store { return b.buildVolumeAttachmentStore() },
-	"verticalpodautoscalers":          func(b *Builder) cache.Store { return b.buildVPAStore() },
+	"services":                        func(b *Builder) cache.Store { return b.buildServiceStore() },
 }
 
 func resourceExists(name string) bool {
@@ -204,120 +173,40 @@ func availableResources() []string {
 	return c
 }
 
-func (b *Builder) buildConfigMapStore() cache.Store {
-	return b.buildStoreFunc(configMapMetricFamilies, &v1.ConfigMap{}, createConfigMapListWatch)
-}
-
-func (b *Builder) buildCronJobStore() cache.Store {
-	return b.buildStoreFunc(cronJobMetricFamilies, &batchv1beta1.CronJob{}, createCronJobListWatch)
-}
-
-func (b *Builder) buildDaemonSetStore() cache.Store {
-	return b.buildStoreFunc(daemonSetMetricFamilies, &appsv1.DaemonSet{}, createDaemonSetListWatch)
-}
-
-func (b *Builder) buildDeploymentStore() cache.Store {
-	return b.buildStoreFunc(deploymentMetricFamilies, &appsv1.Deployment{}, createDeploymentListWatch)
-}
-
-func (b *Builder) buildEndpointsStore() cache.Store {
-	return b.buildStoreFunc(endpointMetricFamilies, &v1.Endpoints{}, createEndpointsListWatch)
-}
-
-func (b *Builder) buildHPAStore() cache.Store {
-	return b.buildStoreFunc(hpaMetricFamilies, &autoscaling.HorizontalPodAutoscaler{}, createHPAListWatch)
-}
-
-func (b *Builder) buildIngressStore() cache.Store {
-	return b.buildStoreFunc(ingressMetricFamilies, &extensions.Ingress{}, createIngressListWatch)
-}
-
-func (b *Builder) buildJobStore() cache.Store {
-	return b.buildStoreFunc(jobMetricFamilies, &batchv1.Job{}, createJobListWatch)
-}
-
-func (b *Builder) buildLimitRangeStore() cache.Store {
-	return b.buildStoreFunc(limitRangeMetricFamilies, &v1.LimitRange{}, createLimitRangeListWatch)
-}
-
-func (b *Builder) buildMutatingWebhookConfigurationStore() cache.Store {
-	return b.buildStoreFunc(mutatingWebhookConfigurationMetricFamilies, &admissionregistration.MutatingWebhookConfiguration{}, createMutatingWebhookConfigurationListWatch)
-}
-
-func (b *Builder) buildNamespaceStore() cache.Store {
-	return b.buildStoreFunc(namespaceMetricFamilies, &v1.Namespace{}, createNamespaceListWatch)
-}
-
-func (b *Builder) buildNetworkPolicyStore() cache.Store {
-	return b.buildStoreFunc(networkpolicyMetricFamilies, &networkingv1.NetworkPolicy{}, createNetworkPolicyListWatch)
+func (b *Builder) buildPodStore() cache.Store {
+	return b.buildStoreFunc(podMetricFamilies, &v1.Event{}, createPodEventListWatch)
 }
 
 func (b *Builder) buildNodeStore() cache.Store {
-	return b.buildStoreFunc(nodeMetricFamilies, &v1.Node{}, createNodeListWatch)
+	return b.buildStoreFunc(nodeMetricFamilies, &v1.Event{}, createNodeEventListWatch)
 }
 
-func (b *Builder) buildPersistentVolumeClaimStore() cache.Store {
-	return b.buildStoreFunc(persistentVolumeClaimMetricFamilies, &v1.PersistentVolumeClaim{}, createPersistentVolumeClaimListWatch)
+func (b *Builder) buildConfigMapStore() cache.Store {
+	return b.buildStoreFunc(configMapMetricFamilies, &v1.Event{}, createConfigMapEventListWatch)
 }
 
-func (b *Builder) buildPersistentVolumeStore() cache.Store {
-	return b.buildStoreFunc(persistentVolumeMetricFamilies, &v1.PersistentVolume{}, createPersistentVolumeListWatch)
+func (b *Builder) buildDeploymentStore() cache.Store {
+	return b.buildStoreFunc(deploymentMetricFamilies, &v1.Event{}, createDeploymentEventListWatch)
 }
 
-func (b *Builder) buildPodDisruptionBudgetStore() cache.Store {
-	return b.buildStoreFunc(podDisruptionBudgetMetricFamilies, &policy.PodDisruptionBudget{}, createPodDisruptionBudgetListWatch)
+func (b *Builder) buildDaemonSetStore() cache.Store {
+	return b.buildStoreFunc(daemonSetMetricFamilies, &v1.Event{}, createDaemonSetEventListWatch)
 }
 
 func (b *Builder) buildReplicaSetStore() cache.Store {
-	return b.buildStoreFunc(replicaSetMetricFamilies, &appsv1.ReplicaSet{}, createReplicaSetListWatch)
-}
-
-func (b *Builder) buildReplicationControllerStore() cache.Store {
-	return b.buildStoreFunc(replicationControllerMetricFamilies, &v1.ReplicationController{}, createReplicationControllerListWatch)
-}
-
-func (b *Builder) buildResourceQuotaStore() cache.Store {
-	return b.buildStoreFunc(resourceQuotaMetricFamilies, &v1.ResourceQuota{}, createResourceQuotaListWatch)
-}
-
-func (b *Builder) buildSecretStore() cache.Store {
-	return b.buildStoreFunc(secretMetricFamilies, &v1.Secret{}, createSecretListWatch)
+	return b.buildStoreFunc(replicaSetMetricFamilies, &v1.Event{}, createReplicaSetEventListWatch)
 }
 
 func (b *Builder) buildServiceStore() cache.Store {
-	return b.buildStoreFunc(serviceMetricFamilies, &v1.Service{}, createServiceListWatch)
+	return b.buildStoreFunc(serviceMetricFamilies, &v1.Event{}, createServiceEventListWatch)
 }
 
 func (b *Builder) buildStatefulSetStore() cache.Store {
-	return b.buildStoreFunc(statefulSetMetricFamilies, &appsv1.StatefulSet{}, createStatefulSetListWatch)
+	return b.buildStoreFunc(statefulSetMetricFamilies, &v1.Event{}, createStatefulSetEventListWatch)
 }
 
-func (b *Builder) buildStorageClassStore() cache.Store {
-	return b.buildStoreFunc(storageClassMetricFamilies, &storagev1.StorageClass{}, createStorageClassListWatch)
-}
-
-func (b *Builder) buildPodStore() cache.Store {
-	return b.buildStoreFunc(podMetricFamilies, &v1.Pod{}, createPodListWatch)
-}
-
-func (b *Builder) buildCsrStore() cache.Store {
-	return b.buildStoreFunc(csrMetricFamilies, &certv1beta1.CertificateSigningRequest{}, createCSRListWatch)
-}
-
-func (b *Builder) buildValidatingWebhookConfigurationStore() cache.Store {
-	return b.buildStoreFunc(validatingWebhookConfigurationMetricFamilies, &admissionregistration.ValidatingWebhookConfiguration{}, createValidatingWebhookConfigurationListWatch)
-}
-
-func (b *Builder) buildVolumeAttachmentStore() cache.Store {
-	return b.buildStoreFunc(volumeAttachmentMetricFamilies, &storagev1.VolumeAttachment{}, createVolumeAttachmentListWatch)
-}
-
-func (b *Builder) buildVPAStore() cache.Store {
-	return b.buildStoreFunc(vpaMetricFamilies, &vpaautoscaling.VerticalPodAutoscaler{}, createVPAListWatchFunc(b.vpaClient))
-}
-
-func (b *Builder) buildLeases() cache.Store {
-	return b.buildStoreFunc(leaseMetricFamilies, &coordinationv1.Lease{}, createLeaseListWatch)
+func (b *Builder) buildPersistentVolumeClaimStore() cache.Store {
+	return b.buildStoreFunc(persistentVolumeClaimMetricFamilies, &v1.Event{}, createPersistentVolumeClaimEventListWatch)
 }
 
 func (b *Builder) buildStore(

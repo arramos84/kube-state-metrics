@@ -19,7 +19,7 @@ package generator
 import (
 	"strings"
 
-	"k8s.io/kube-state-metrics/pkg/metric"
+	"k8s.io/kube-event-exporter/pkg/metric"
 )
 
 // FamilyGenerator provides everything needed to generate a metric family with a

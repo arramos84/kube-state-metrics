@@ -33,12 +33,12 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
-	"k8s.io/kube-state-metrics/internal/store"
-	metricsstore "k8s.io/kube-state-metrics/pkg/metrics_store"
-	"k8s.io/kube-state-metrics/pkg/options"
+	"k8s.io/kube-event-exporter/internal/store"
+	metricsstore "k8s.io/kube-event-exporter/pkg/metrics_store"
+	"k8s.io/kube-event-exporter/pkg/options"
 )
 
-// MetricsHandler is a http.Handler that exposes the main kube-state-metrics
+// MetricsHandler is a http.Handler that exposes the main kube-event-exporter
 // /metrics endpoint. It allows concurrent reconfiguration at runtime.
 type MetricsHandler struct {
 	opts               *options.Options

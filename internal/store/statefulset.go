@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,217 +17,67 @@ limitations under the License.
 package store
 
 import (
-	"k8s.io/kube-state-metrics/pkg/metric"
-	generator "k8s.io/kube-state-metrics/pkg/metric_generator"
-
-	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/kube-event-exporter/pkg/metric"
+	generator "k8s.io/kube-event-exporter/pkg/metric_generator"
+
+	v1 "k8s.io/api/core/v1"
 )
 
 var (
-	descStatefulSetLabelsName          = "kube_statefulset_labels"
-	descStatefulSetLabelsHelp          = "Kubernetes labels converted to Prometheus labels."
-	descStatefulSetLabelsDefaultLabels = []string{"namespace", "statefulset"}
-
 	statefulSetMetricFamilies = []generator.FamilyGenerator{
 		{
-			Name: "kube_statefulset_created",
+			Name: "kube_statefulset_events",
 			Type: metric.Gauge,
-			Help: "Unix creation timestamp",
-			GenerateFunc: wrapStatefulSetFunc(func(s *v1.StatefulSet) *metric.Family {
-				ms := []*metric.Metric{}
-
-				if !s.CreationTimestamp.IsZero() {
-					ms = append(ms, &metric.Metric{
-						Value: float64(s.CreationTimestamp.Unix()),
-					})
+			Help: "StatefulSet events.",
+			GenerateFunc: wrapStatefulSetEventFunc(func(e *v1.Event) *metric.Family {
+				alertCategory := "amend"
+				if e.Type != "Normal" {
+					alertCategory = "failure"
 				}
 
-				return &metric.Family{
-					Metrics: ms,
-				}
-			}),
-		},
-		{
-			Name: "kube_statefulset_status_replicas",
-			Type: metric.Gauge,
-			Help: "The number of replicas per StatefulSet.",
-			GenerateFunc: wrapStatefulSetFunc(func(s *v1.StatefulSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							Value: float64(s.Status.Replicas),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_statefulset_status_replicas_current",
-			Type: metric.Gauge,
-			Help: "The number of current replicas per StatefulSet.",
-			GenerateFunc: wrapStatefulSetFunc(func(s *v1.StatefulSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							Value: float64(s.Status.CurrentReplicas),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_statefulset_status_replicas_ready",
-			Type: metric.Gauge,
-			Help: "The number of ready replicas per StatefulSet.",
-			GenerateFunc: wrapStatefulSetFunc(func(s *v1.StatefulSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							Value: float64(s.Status.ReadyReplicas),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_statefulset_status_replicas_updated",
-			Type: metric.Gauge,
-			Help: "The number of updated replicas per StatefulSet.",
-			GenerateFunc: wrapStatefulSetFunc(func(s *v1.StatefulSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							Value: float64(s.Status.UpdatedReplicas),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_statefulset_status_observed_generation",
-			Type: metric.Gauge,
-			Help: "The generation observed by the StatefulSet controller.",
-			GenerateFunc: wrapStatefulSetFunc(func(s *v1.StatefulSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							Value: float64(s.Status.ObservedGeneration),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_statefulset_replicas",
-			Type: metric.Gauge,
-			Help: "Number of desired pods for a StatefulSet.",
-			GenerateFunc: wrapStatefulSetFunc(func(s *v1.StatefulSet) *metric.Family {
-				ms := []*metric.Metric{}
-
-				if s.Spec.Replicas != nil {
-					ms = append(ms, &metric.Metric{
-						Value: float64(*s.Spec.Replicas),
-					})
+				m := metric.Metric{
+					LabelKeys:   []string{"namespace", "statefulset", "reason", "type", "message", "asserts_entity_type", "asserts_alert_type", "asserts_alert_category"},
+					LabelValues: []string{e.InvolvedObject.Namespace, e.InvolvedObject.Name, e.Reason, e.Type, e.Message, "StatefulSet", "cause", alertCategory},
+					Value:       1,
 				}
 
 				return &metric.Family{
-					Metrics: ms,
-				}
-			}),
-		},
-		{
-			Name: "kube_statefulset_metadata_generation",
-			Type: metric.Gauge,
-			Help: "Sequence number representing a specific generation of the desired state for the StatefulSet.",
-			GenerateFunc: wrapStatefulSetFunc(func(s *v1.StatefulSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							Value: float64(s.ObjectMeta.Generation),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: descStatefulSetLabelsName,
-			Type: metric.Gauge,
-			Help: descStatefulSetLabelsHelp,
-			GenerateFunc: wrapStatefulSetFunc(func(s *v1.StatefulSet) *metric.Family {
-				labelKeys, labelValues := kubeLabelsToPrometheusLabels(s.Labels)
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							LabelKeys:   labelKeys,
-							LabelValues: labelValues,
-							Value:       1,
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_statefulset_status_current_revision",
-			Type: metric.Gauge,
-			Help: "Indicates the version of the StatefulSet used to generate Pods in the sequence [0,currentReplicas).",
-			GenerateFunc: wrapStatefulSetFunc(func(s *v1.StatefulSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							LabelKeys:   []string{"revision"},
-							LabelValues: []string{s.Status.CurrentRevision},
-							Value:       1,
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_statefulset_status_update_revision",
-			Type: metric.Gauge,
-			Help: "Indicates the version of the StatefulSet used to generate Pods in the sequence [replicas-updatedReplicas,replicas)",
-			GenerateFunc: wrapStatefulSetFunc(func(s *v1.StatefulSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							LabelKeys:   []string{"revision"},
-							LabelValues: []string{s.Status.UpdateRevision},
-							Value:       1,
-						},
-					},
+					Metrics: []*metric.Metric{&m},
 				}
 			}),
 		},
 	}
 )
 
-func wrapStatefulSetFunc(f func(*v1.StatefulSet) *metric.Family) func(interface{}) *metric.Family {
+func wrapStatefulSetEventFunc(f func(e *v1.Event) *metric.Family) func(interface{}) *metric.Family {
 	return func(obj interface{}) *metric.Family {
-		statefulSet := obj.(*v1.StatefulSet)
-
-		metricFamily := f(statefulSet)
-
-		for _, m := range metricFamily.Metrics {
-			m.LabelKeys = append(descStatefulSetLabelsDefaultLabels, m.LabelKeys...)
-			m.LabelValues = append([]string{statefulSet.Namespace, statefulSet.Name}, m.LabelValues...)
-		}
+		event := obj.(*v1.Event)
+		metricFamily := f(event)
 
 		return metricFamily
 	}
 }
 
-func createStatefulSetListWatch(kubeClient clientset.Interface, ns string) cache.ListerWatcher {
+func createStatefulSetEventListWatch(kubeClient clientset.Interface, ns string) cache.ListerWatcher {
 	return &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
-			return kubeClient.AppsV1().StatefulSets(ns).List(opts)
+			opts = metav1.ListOptions{
+				FieldSelector: "involvedObject.kind=StatefulSet",
+			}
+			return kubeClient.CoreV1().Events(ns).List(opts)
 		},
 		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
-			return kubeClient.AppsV1().StatefulSets(ns).Watch(opts)
+			opts = metav1.ListOptions{
+				FieldSelector: "involvedObject.kind=StatefulSet",
+			}
+			return kubeClient.CoreV1().Events(ns).Watch(opts)
 		},
 	}
 }
+
+

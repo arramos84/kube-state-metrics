@@ -17,211 +17,67 @@ limitations under the License.
 package store
 
 import (
-	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/kube-event-exporter/pkg/metric"
+	generator "k8s.io/kube-event-exporter/pkg/metric_generator"
 
-	"k8s.io/kube-state-metrics/pkg/metric"
-	generator "k8s.io/kube-state-metrics/pkg/metric_generator"
+	v1 "k8s.io/api/core/v1"
 )
 
 var (
-	descDaemonSetLabelsName          = "kube_daemonset_labels"
-	descDaemonSetLabelsHelp          = "Kubernetes labels converted to Prometheus labels."
-	descDaemonSetLabelsDefaultLabels = []string{"namespace", "daemonset"}
-
 	daemonSetMetricFamilies = []generator.FamilyGenerator{
 		{
-			Name: "kube_daemonset_created",
+			Name: "kube_daemonset_events",
 			Type: metric.Gauge,
-			Help: "Unix creation timestamp",
-			GenerateFunc: wrapDaemonSetFunc(func(d *v1.DaemonSet) *metric.Family {
-				ms := []*metric.Metric{}
-
-				if !d.CreationTimestamp.IsZero() {
-					ms = append(ms, &metric.Metric{
-						LabelKeys:   []string{},
-						LabelValues: []string{},
-						Value:       float64(d.CreationTimestamp.Unix()),
-					})
+			Help: "DaemonSet events.",
+			GenerateFunc: wrapDaemonSetEventFunc(func(e *v1.Event) *metric.Family {
+				alertCategory := "amend"
+				if e.Type != "Normal" {
+					alertCategory = "failure"
 				}
 
-				return &metric.Family{
-					Metrics: ms,
+				m := metric.Metric{
+					LabelKeys:   []string{"namespace", "daemonset", "reason", "type", "message", "asserts_entity_type", "asserts_alert_type", "asserts_alert_category"},
+					LabelValues: []string{e.InvolvedObject.Namespace, e.InvolvedObject.Name, e.Reason, e.Type, e.Message, "DaemonSet", "cause", alertCategory},
+					Value:       1,
 				}
-			}),
-		},
-		{
-			Name: "kube_daemonset_status_current_number_scheduled",
-			Type: metric.Gauge,
-			Help: "The number of nodes running at least one daemon pod and are supposed to.",
-			GenerateFunc: wrapDaemonSetFunc(func(d *v1.DaemonSet) *metric.Family {
+
 				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							LabelKeys:   []string{},
-							LabelValues: []string{},
-							Value:       float64(d.Status.CurrentNumberScheduled),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_daemonset_status_desired_number_scheduled",
-			Type: metric.Gauge,
-			Help: "The number of nodes that should be running the daemon pod.",
-			GenerateFunc: wrapDaemonSetFunc(func(d *v1.DaemonSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							LabelKeys:   []string{},
-							LabelValues: []string{},
-							Value:       float64(d.Status.DesiredNumberScheduled),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_daemonset_status_number_available",
-			Type: metric.Gauge,
-			Help: "The number of nodes that should be running the daemon pod and have one or more of the daemon pod running and available",
-			GenerateFunc: wrapDaemonSetFunc(func(d *v1.DaemonSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							LabelKeys:   []string{},
-							LabelValues: []string{},
-							Value:       float64(d.Status.NumberAvailable),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_daemonset_status_number_misscheduled",
-			Type: metric.Gauge,
-			Help: "The number of nodes running a daemon pod but are not supposed to.",
-			GenerateFunc: wrapDaemonSetFunc(func(d *v1.DaemonSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							LabelKeys:   []string{},
-							LabelValues: []string{},
-							Value:       float64(d.Status.NumberMisscheduled),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_daemonset_status_number_ready",
-			Type: metric.Gauge,
-			Help: "The number of nodes that should be running the daemon pod and have one or more of the daemon pod running and ready.",
-			GenerateFunc: wrapDaemonSetFunc(func(d *v1.DaemonSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							LabelKeys:   []string{},
-							LabelValues: []string{},
-							Value:       float64(d.Status.NumberReady),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_daemonset_status_number_unavailable",
-			Type: metric.Gauge,
-			Help: "The number of nodes that should be running the daemon pod and have none of the daemon pod running and available",
-			GenerateFunc: wrapDaemonSetFunc(func(d *v1.DaemonSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							LabelKeys:   []string{},
-							LabelValues: []string{},
-							Value:       float64(d.Status.NumberUnavailable),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_daemonset_updated_number_scheduled",
-			Type: metric.Gauge,
-			Help: "The total number of nodes that are running updated daemon pod",
-			GenerateFunc: wrapDaemonSetFunc(func(d *v1.DaemonSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							Value: float64(d.Status.UpdatedNumberScheduled),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: "kube_daemonset_metadata_generation",
-			Type: metric.Gauge,
-			Help: "Sequence number representing a specific generation of the desired state.",
-			GenerateFunc: wrapDaemonSetFunc(func(d *v1.DaemonSet) *metric.Family {
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							LabelKeys:   []string{},
-							LabelValues: []string{},
-							Value:       float64(d.ObjectMeta.Generation),
-						},
-					},
-				}
-			}),
-		},
-		{
-			Name: descDaemonSetLabelsName,
-			Type: metric.Gauge,
-			Help: descDaemonSetLabelsHelp,
-			GenerateFunc: wrapDaemonSetFunc(func(d *v1.DaemonSet) *metric.Family {
-				labelKeys, labelValues := kubeLabelsToPrometheusLabels(d.ObjectMeta.Labels)
-				return &metric.Family{
-					Metrics: []*metric.Metric{
-						{
-							LabelKeys:   labelKeys,
-							LabelValues: labelValues,
-							Value:       1,
-						},
-					},
+					Metrics: []*metric.Metric{&m},
 				}
 			}),
 		},
 	}
 )
 
-func wrapDaemonSetFunc(f func(*v1.DaemonSet) *metric.Family) func(interface{}) *metric.Family {
+func wrapDaemonSetEventFunc(f func(e *v1.Event) *metric.Family) func(interface{}) *metric.Family {
 	return func(obj interface{}) *metric.Family {
-		daemonSet := obj.(*v1.DaemonSet)
-
-		metricFamily := f(daemonSet)
-
-		for _, m := range metricFamily.Metrics {
-			m.LabelKeys = append(descDaemonSetLabelsDefaultLabels, m.LabelKeys...)
-			m.LabelValues = append([]string{daemonSet.Namespace, daemonSet.Name}, m.LabelValues...)
-		}
+		event := obj.(*v1.Event)
+		metricFamily := f(event)
 
 		return metricFamily
 	}
 }
 
-func createDaemonSetListWatch(kubeClient clientset.Interface, ns string) cache.ListerWatcher {
+func createDaemonSetEventListWatch(kubeClient clientset.Interface, ns string) cache.ListerWatcher {
 	return &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
-			return kubeClient.AppsV1().DaemonSets(ns).List(opts)
+			opts = metav1.ListOptions{
+				FieldSelector: "involvedObject.kind=DaemonSet",
+			}
+			return kubeClient.CoreV1().Events(ns).List(opts)
 		},
 		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
-			return kubeClient.AppsV1().DaemonSets(ns).Watch(opts)
+			opts = metav1.ListOptions{
+				FieldSelector: "involvedObject.kind=DaemonSet",
+			}
+			return kubeClient.CoreV1().Events(ns).Watch(opts)
 		},
 	}
 }
+
+
